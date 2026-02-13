@@ -65,7 +65,7 @@ combined_survival_hazard_plot <- "YES"
 
 # Load data -------------------------------------------------------------------
 
-movebank_store_credentials("RBook", "Obstberg1", force = T)
+movebank_store_credentials("USERNAME", "PASSWORD", force = T)
 
 # Mountain caribou in British Columbia: 216040785
 mountain_caribou <- movebank_download_study(study_id = 216040785, 'license-md5'='65f5187abc85645e0101229c87a6d93f') 
