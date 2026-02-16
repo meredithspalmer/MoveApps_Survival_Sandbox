@@ -1218,10 +1218,3 @@ ggsave(filename = "km_curve_stratified.png",
 # Return the original data unchanged
 return(data)
 }
-
-
-# Cox Model with staggered entry 
-CREATE A NEW APP FOR THIS 
-treatment <- "sex"
-cox_fit <- coxph(Surv(entry_time_days, exit_time_days, mortality_event) ~ treatment, data = summary_table)
-summary(cox_fit)
