@@ -26,16 +26,14 @@ library(forcats)
 time_period_start    <- as.POSIXct("2001-01-01", tz= "UTC")  
 time_period_end      <- NA
 
-## Fix NA times: 
+## Fix NA times (3 options): 
 # 1a) Replace NA deploy_off_timestamp with time_period_end
-# Input: Yes/No
 reset_na_end <- "YES"
 
 # 1b) Replace NA deploy_off_timestamp with current date 
-# Input: Yes/No
-reset_systime_end <- "YES"
+reset_systime_end <- "NO"
 
-# 2) Remove tracks with no deploy_on_timestamp and/or deploy_off_timestamp 
+# 1c) Remove tracks with no deploy_on_timestamp and/or deploy_off_timestamp 
 NEED TO CODE THIS 
 
 
@@ -65,7 +63,7 @@ combined_survival_hazard_plot <- "YES"
 
 # Load data -------------------------------------------------------------------
 
-movebank_store_credentials("USERNAME", "PASSWORD", force = T)
+movebank_store_credentials("RBook", "Obstberg1", force = T)
 
 # Mountain caribou in British Columbia: 216040785
 mountain_caribou <- movebank_download_study(study_id = 216040785, 'license-md5'='65f5187abc85645e0101229c87a6d93f') 
@@ -179,50 +177,82 @@ events_with_ind <- events |>
            .before = everything())
 
 # Summarize timestamps and location count per individual
-MAKE THIS A "IF EXIST" FOR COLUMNS 
-
 summary_table <- events_with_ind |>
   group_by(individual_id) |>
-  summarise(first_timestamp = min(as.Date(timestamp), na.rm = TRUE),
-            last_timestamp = max(as.Date(timestamp), na.rm = TRUE),
-            n_locations = n(),
-            n_deployments = n_distinct(deployment_id),
-            timestamp_first_deployed_location = min(timestamp_first_deployed_location,na.rm = TRUE),
-            timestamp_last_deployed_location = max(timestamp_last_deployed_location, na.rm = TRUE),
-            deploy_on_timestamp = if(all(is.na(deploy_on_timestamp))) {
-              as.POSIXct(NA)
-            } else {
-              min(deploy_on_timestamp, na.rm = TRUE)
-            }, 
-            deploy_off_timestamp = if(all(is.na(deploy_off_timestamp))) {
-              as.POSIXct(NA)
-            } else {
-              min(deploy_off_timestamp, na.rm = TRUE)
-            }, 
-            mortality_location_filled = max(mortality_location_filled, na.rm = TRUE), 
-            sex = str_c(unique(sex[!is.na(sex)]), collapse = " | "),
-            death_comments = str_c(unique(death_comments[!is.na(death_comments)]), collapse = " | "),
-            deployment_end_comments = str_c(unique(deployment_end_comments[!is.na(deployment_end_comments)]), collapse = " | "),
-            deployment_end_type = str_c(unique(deployment_end_type[!is.na(deployment_end_type)]), collapse = " | "),
-            animal_life_stage = str_c(unique(animal_life_stage[!is.na(animal_life_stage)]), collapse = " | "),
-            animal_reproductive_condition = str_c(unique(animal_reproductive_condition[!is.na(animal_reproductive_condition)]), collapse = " | "),
-            attachment_type = str_c(unique(attachment_type[!is.na(attachment_type)]), collapse = " | "),
-            .groups = "drop"
+  summarise(
+    first_timestamp = min(as.Date(timestamp), na.rm = TRUE),
+    last_timestamp  = max(as.Date(timestamp), na.rm = TRUE),
+    n_locations     = n(),
+    n_deployments   = n_distinct(deployment_id),
+    
+    # Timestamp columns: min / max if present
+    timestamp_first_deployed_location = if ("timestamp_first_deployed_location" %in% names(events_with_ind))
+      min(timestamp_first_deployed_location, na.rm = TRUE) else NA,
+    
+    timestamp_last_deployed_location = if ("timestamp_last_deployed_location" %in% names(events_with_ind))
+      max(timestamp_last_deployed_location, na.rm = TRUE) else NA,
+    
+    deploy_on_timestamp = if ("deploy_on_timestamp" %in% names(events_with_ind)) {
+      if (all(is.na(deploy_on_timestamp))) as.POSIXct(NA) else min(deploy_on_timestamp, na.rm = TRUE)
+    } else as.POSIXct(NA),
+    
+    deploy_off_timestamp = if ("deploy_off_timestamp" %in% names(events_with_ind)) {
+      if (all(is.na(deploy_off_timestamp))) as.POSIXct(NA) else max(deploy_off_timestamp, na.rm = TRUE)
+    } else as.POSIXct(NA),
+    
+    # Mortality column: 1/0 if filled if present 
+    mortality_location_filled = if ("mortality_location_filled" %in% names(events_with_ind))
+      as.integer(any(mortality_location_filled >= 1, na.rm = TRUE)) else NA_integer_,
+    
+    # Categorical columns: collapsed unique if present
+    sex = if ("sex" %in% names(events_with_ind))
+      str_c(unique(sex[!is.na(sex)]), collapse = " | ") else NA_character_,
+    
+    death_comments = if ("death_comments" %in% names(events_with_ind))
+      str_c(unique(death_comments[!is.na(death_comments)]), collapse = " | ") else NA_character_,
+    
+    deployment_end_comments = if ("deployment_end_comments" %in% names(events_with_ind))
+      str_c(unique(deployment_end_comments[!is.na(deployment_end_comments)]), collapse = " | ") else NA_character_,
+    
+    deployment_end_type = if ("deployment_end_type" %in% names(events_with_ind))
+      str_c(unique(deployment_end_type[!is.na(deployment_end_type)]), collapse = " | ") else NA_character_,
+    
+    animal_life_stage = if ("animal_life_stage" %in% names(events_with_ind))
+      str_c(unique(animal_life_stage[!is.na(animal_life_stage)]), collapse = " | ") else NA_character_,
+    
+    animal_reproductive_condition = if ("animal_reproductive_condition" %in% names(events_with_ind))
+      str_c(unique(animal_reproductive_condition[!is.na(animal_reproductive_condition)]), collapse = " | ") else NA_character_,
+    
+    attachment_type = if ("attachment_type" %in% names(events_with_ind))
+      str_c(unique(attachment_type[!is.na(attachment_type)]), collapse = " | ") else NA_character_,
+    
+    .groups = "drop"
   ) |>
   mutate(
+    
+    # Clean empty strings (fill NA) for columns that exist
     across(
-      c(death_comments, deployment_end_comments, deployment_end_type,
-        animal_life_stage, animal_reproductive_condition),
+      any_of(c(
+        "death_comments",
+        "deployment_end_comments",
+        "deployment_end_type",
+        "animal_life_stage",
+        "animal_reproductive_condition"
+      )),
       ~ if_else(. == "", NA_character_, .)
-    ), 
-    deploy_on_timestamp  = as.Date(deploy_on_timestamp),
-    deploy_off_timestamp = as.Date(deploy_off_timestamp)
+    ),
+    
+    # Convert deploy timestamps 
+    across(
+      any_of(c("deploy_on_timestamp", "deploy_off_timestamp")),
+      as.Date
+    )
   )
 
 
 ## Clean dates --- 
 
-## Replace "deploy_on_timestamp" with "first_timestamp" 
+## Replace "deploy_on_timestamp" with "first_timestamp" if NA 
 summary_table <- summary_table %>% 
   mutate(missing_timestamp_start = is.na(deploy_on_timestamp))
 n_missing <- sum(is.na(summary_table$deploy_on_timestamp), na.rm = TRUE)
@@ -284,7 +314,7 @@ if(reset_na_end == "YES"){
       mutate(deploy_off_timestamp = if_else(
         is.na(deploy_off_timestamp),
         as.Date(last_timestamp),
-        deploy_off_timestamp))%>% 
+        deploy_off_timestamp)) %>% 
       dplyr::select(-missing_timestamp_end)
     
       # Warning for data update 
@@ -685,16 +715,10 @@ if(group_comparison_individual = "reproCond_offspring"){
   LOG: what life stages are found 
 }
 
-# (for internal review) 
-str(data)
-summary(data)
-names(mt_track_data(data))
-summary(mt_track_data(data))
 
+## Basic summaries ------------------------------------------------------------
 
-# Basic summary ---------------------------------------------------------------
-
-# Plot length of each individual's tracking: 
+## Plot length of each individual's tracking: 
 # Create a mapping from deployment_id → individual_id (one-to-one)
 deployment_to_ind <- mt_track_data(data) |>
   select(deployment_id, individual_id) |>
@@ -708,34 +732,25 @@ data_with_ind <- data |>
 track_times <- data_with_ind |>
   group_by(individual_id) |>
   summarise(
-    start    = min(timestamp, na.rm = TRUE),   # or mt_time(.) if you prefer the accessor
+    start    = min(timestamp, na.rm = TRUE),    
     end      = max(timestamp, na.rm = TRUE),
     n_locs   = n(),
     n_deploy = n_distinct(deployment_id),
     .groups  = "drop"
   ) |>
-  # Join back full individual/track metadata (sex, taxon, etc.)
   left_join(
     mt_track_data(data) |>
-      distinct(individual_id, .keep_all = TRUE),  # keep one row per individual
+      distinct(individual_id, .keep_all = TRUE),  # 
     by = "individual_id"
   ) |>
   mutate(
     duration_days = round(as.numeric(difftime(end, start, units = "days")), 1),
-    # Ordered factor for chronological y-axis
     track_label = fct_reorder(as.character(individual_id), start)
-    # If you prefer the local name (often more readable):
-    # track_label = fct_reorder(as.character(individual_local_identifier), start)
   ) |>
   arrange(start)
 
-# Quick sanity checks
-print(nrow(track_times))                # number of unique individuals
-print(summary(track_times$duration_days))
-print(head(track_times[, c("individual_id", "start", "end", "duration_days", "n_locs", "n_deploy")]))
-
 # Plot 
-ggplot(track_times) +
+(tracking_history <- ggplot(track_times) +
   geom_segment(
     aes(x = start, xend = end, y = track_label, yend = track_label),
     linewidth = 3, color = "steelblue"
@@ -755,70 +770,113 @@ ggplot(track_times) +
   theme(
     axis.text.y = element_text(size = 8),
     panel.grid.major.y = element_blank(),
-    panel.grid.minor = element_blank()
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,         
+      vjust = 1          
+    )
   ) +
   scale_x_datetime(
     date_breaks = "1 year",
     date_labels = "%Y"
-  )
+  ))
 
-SAVE THIS PLOT 
-
-
-# Summarize -------------------------------------------------------------------
-
-# Kaplan-Meier with staggered entry
-km_fit <- survfit(Surv(entry_time, exit_time, event) ~ 1, data = data)
-plot(km_fit)
-
-# Cox Model with staggered entry
-cox_fit <- coxph(Surv(entry_time, exit_time, event) ~ treatment, data = data)
-summary(cox_fit)
+ggsave(filename = "tracking_history.png", 
+       plot = tracking_history,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
 
 
-# Is few n_locations sketchy? 
-View(summary_table[summary_table$n_locations == 1,])
-# -> nothing to suggest died; 0 day duration
-# -> note that timestamp_last_deployed_location, timestamp_first_deployed_location very different from first_ and last_timestamps 
-# -> remove? 
+## Plot length of each individual's tracking for final (cropped) data: 
 
-# Did mortality location filled work? 
-unique(summary_table$mortality_location_filled)
-# -> revisit original data 
+# Prepare the data for plotting
+track_times <- summary_table %>%
+  mutate(
+    # Ensure timestamps are Date/POSIXct (already are in your data)
+    start = first_timestamp,
+    end   = last_timestamp,
+    
+    # Duration in days (for optional use)
+    duration_days = round(as.numeric(difftime(end, start, units = "days")), 1),
+    
+    # Ordered factor for y-axis (chronological by start time)
+    track_label = fct_reorder(as.character(individual_id), start)
+  ) %>%
+  arrange(start)
 
-
-
-also check if mortality_location filled
-other checks? mortality_date not included? 
+# Create the plot
+(tracking_history_subset <- ggplot(track_times) +
+  geom_segment(
+    aes(x = start, xend = end, y = track_label, yend = track_label),
+    linewidth = 3, color = "steelblue"
+  ) +
   
+  geom_point(
+    aes(x = start, y = track_label),
+    color = "darkgreen", size = 3.5
+  ) +
   
-  # Handle potential NAs or inconsistencies
-  # - For example, if life_stage varies, this uses first; inspect summary_table for issues
-  # - If many NAs, consider filtering or imputing downstream
+  geom_point(
+    aes(x = end, y = track_label),
+    color = "firebrick", size = 3.5
+  ) +
   
-  # View or save the table
-  View(summary_table)
-table(summary_table$survival_event)
+  labs(
+     title    = "Tracking History per Individual (Data Subset)",
+     subtitle = sprintf("%d unique individuals • %d total deployments • %d locations",
+                         nrow(track_times),
+                         sum(track_times$n_deploy, na.rm = TRUE),
+                         sum(track_times$n_locations, na.rm = TRUE)),    
+    x = "Time",
+    y = "Individual ID"
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 8),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.subtitle = element_text(size = 10, color = "grey50"), 
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,         
+      vjust = 1 )
+  ) +
+  
+  scale_x_datetime(
+    date_breaks = "1 year",
+    date_labels = "%Y"
+  )) 
+
+ggsave(filename = "tracking_history_cropped.png", 
+       plot = tracking_history_subset,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
+
+
+# Combine
+library(patchwork)
+(combined_plot <- tracking_history / tracking_history_subset)
+
+SAVE THIS 
 
 
 ## Survival Analysis ----------------------------------------------------------
 
 ## Univariate -----------------------------------------------------------------
 
-# Kaplan-Meier with staggered entry
-km_fit <- survfit(Surv(entry_time, exit_time, event) ~ 1, data = data)
+## Kaplan-Meier with staggered entry
+km_fit <- survfit(Surv(entry_time_days, exit_time_days, mortality_event) ~ 1, data = summary_table)
+
+# (for diagnostics - not include)
 plot(km_fit)
 
-# Cox Model with staggered entry
-cox_fit <- coxph(Surv(entry_time, exit_time, event) ~ treatment, data = data)
-summary(cox_fit)
 
-# Fit survival object 
-surv_obj <- Surv(time = summary_table$duration_days, event = summary_table$survival_event)
-km_fit <- survfit(surv_obj ~ 1)  
-
-# Life table 
-times <- round(seq(min(summary_table$duration_days), max(summary_table$duration_days), 
+## Life table 
+times <- round(seq(min(summary_table$entry_time_days), max(summary_table$exit_time_days), 
                    length.out = 10))
 s <- summary(km_fit, times = times)
 life_table <- data.frame(time       = s$time,
@@ -829,13 +887,15 @@ life_table <- data.frame(time       = s$time,
                          lower_95   = s$lower,
                          upper_95   = s$upper)
 
+# (for diagnostics - not include)
+life_table
+
 # -> Write lifetable to CSV artefact 
 write.csv(life_table, file = "survival_statistics.csv", row.names = FALSE)
 
 
-# KM Survival Curve 
+## KM Survival Curve 
 km_summary <- summary(km_fit)
-
 km_df <- data.frame(time    = km_summary$time,
                     surv    = km_summary$surv,    
                     n_risk  = km_summary$n.risk,   
@@ -843,7 +903,6 @@ km_df <- data.frame(time    = km_summary$time,
                     lower   = km_summary$lower,   
                     upper   = km_summary$upper,  
                     std_err = km_summary$std.err)
-
 n.ind <- nrow(summary_table)
 n.events <- nrow(summary_table[summary_table$survival_event == 1,])
 n.days <- as.numeric(summary(km_fit)$table["median"])
@@ -882,13 +941,20 @@ km_curve <- ggplot(km_df, aes(x = time, y = surv)) +
     plot.margin  = margin(10, 10, 10, 10)
   )
 
-# -> save plot attribute 
-DO THIS 
+# (for diagnostics - not include)
+km_curve
 
-ADD MEDIAN SURVIVAL 
-ADD RISK TABLE, CENSOR TABLE 
+# -> save plot attribute 
+ggsave(filename = "km_survival_curve.png", 
+       plot = km_curve,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
+
+
 
 # Kaplan-Meier Survival Curve
+med <- survminer::surv_median(km_fit)
 (p_surv <- ggsurvplot(km_fit,
                       data = summary_table,
                       title = "Kaplan-Meier Survival Curve",
@@ -901,15 +967,34 @@ ADD RISK TABLE, CENSOR TABLE
                       conf.int = TRUE,
                       risk.table = TRUE,
                       legend = "none",
+                      surv.median.line = "hv",
                       ggtheme = theme_minimal(base_size = 13) +
                         theme(
                           plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
                           axis.title = element_text(face = "bold"))))
 
-# -> save plot attribute 
-DO THIS 
+median_text <- paste("Median:", med$median, "days\n(95% CI:", med$lower, "–", med$upper, ")")
+p_surv$plot <- p_surv$plot +
+  annotate("text",
+           x = Inf,                
+           y = Inf,                
+           label = median_text,
+           hjust = 1.1,            
+           vjust = 1.1,            
+           size = 3.8,             
+           color = "grey30",
+           fontface = "plain",     
+           lineheight = 1.1)     
 
-# Cumulative hazard plot 
+# -> save plot attribute 
+ggsave(filename = "km_survival_curve_attributes.png", 
+       plot = km_curve,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
+
+
+## Cumulative hazard plot 
 (p_cuminc <- ggsurvplot(km_fit,
                         data = summary_table,
                         fun = "event",       # 1 - survival = cumulative incidence/mortality
@@ -926,7 +1011,15 @@ DO THIS
                                                           size = 14),
                                 axis.title = element_text(face = "bold"))))
 
-# Combine with shared legend & title
+# -> save plot attributes 
+ggsave(filename = "cum_hazard_curve.png", 
+       plot = p_cuminc,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
+
+
+## Combined cumulative mortality and cumulative hazard plots 
 p_surv_plot   <- p_surv$plot
 p_cuminc_plot <- p_cuminc$plot
 library(patchwork) #if decide to keep this method 
@@ -946,7 +1039,7 @@ DO THIS
 
 
 # Cumulative Hazard Plot 
-na_fit <- survfit(surv_obj ~ 1, type = "fh")   
+na_fit <- survfit(Surv(entry_time_days, exit_time_days, mortality_event) ~ 1, type = "fh", data = summary_table)   
 s <- summary(na_fit)
 
 cumhaz_df <- data.frame(
@@ -956,7 +1049,7 @@ cumhaz_df <- data.frame(
   upper  = s$cumhaz * exp(+1.96 * s$std.chaz / s$cumhaz)
 )
 
-ggplot(cumhaz_df, aes(x = time, y = cumhaz)) +
+(cum_mort_plot <- ggplot(cumhaz_df, aes(x = time, y = cumhaz)) +
   geom_ribbon(aes(ymin = lower, ymax = upper),
               fill = "#FAD7A8", alpha = 0.35) +
   geom_step(linewidth = 1.3, color = "#D68910") +
@@ -975,54 +1068,135 @@ ggplot(cumhaz_df, aes(x = time, y = cumhaz)) +
     plot.title    = element_text(face = "bold", hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5, color = "gray30"),
     axis.title    = element_text(face = "bold"),
-    plot.caption  = element_text(color = "gray50", size = 9)
+    plot.caption  = element_text(color = "gray50", size = 9))
   )
 
 # Save plot
 DO THIS!! 
   
   
-  ## Comparison -----------------------------------------------------------------
+  
+  p_surv_plot + p_cuminc_plot +
+  plot_layout(ncol = 1) +
+  plot_annotation(
+    title = "Overall Survival and Cumulative Mortality",
+    theme = theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16)
+    )
+  ) &
+  theme(
+    legend.position = "top",
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 11)
+  )
+
+  
+## Comparison -----------------------------------------------------------------
 
 if group_comparsion_individual (== TRUE), 
 SOFT CODE IN VARIABLE 
 
 # Fit survival object 
-km_fit_comp <- survfit(surv_obj ~ sex, data = summary_table)
+summary_table$time_at_risk <- summary_table$exit_time_days - summary_table$entry_time_days
+km_fit_comp <- survfit(Surv(time_at_risk, mortality_event) ~ sex, data = summary_table)
+p_value <- surv_pvalue(km_fit_comp)$pval
 
-# Log-Rank test 
-survdiff(Surv(duration_days, survival_event) ~ sex, data=summary_table)
+
+## Log-Rank test 
+test <- survdiff(Surv(time_at_risk, mortality_event) ~ sex, data=summary_table)
+
+library(knitr)     # for nice printing
+
+# Extract key pieces
+chisq_stat   <- test$chisq
+df           <- length(test$n) - 1
+p_value      <- 1 - pchisq(chisq_stat, df)
+p_formatted  <- ifelse(p_value < 0.001, "< 0.001", sprintf("%.3f", p_value))
+
+# Create a simple table
+logrank_table <- tibble(
+  Comparison          = paste(deparse(test$call$formula[[3]]), collapse = " "),
+  "N (events)"        = paste(test$n, " (", test$obs, " events)", sep = ""),
+  Chisq               = round(chisq_stat, 2),
+  df                  = df,
+  "p-value"           = p_formatted
+)
+
+# -> Write summary to CSV artefact 
+write.csv(logrank_table, file = "logrank_table_statistics.csv", row.names = FALSE)
+
 
 # -> generate a nice table that flags significance 
 
 
 # Comparison survival plot curve 
+gender_levels <- unique(summary_table$sex)  # CHANGE sex to stratifying variable
+med <- surv_median(km_fit_comp)
+# Format nicely (e.g. p = 0.057 or p < 0.001)
+p_formatted <- ifelse(p_value < 0.001, "p < 0.001", sprintf("p = %.3f", p_value))
 
-ggsurvplot(
-  km_fit_comp,  
-  data = summary_table,  
-  surv.median.line = "hv",  
+# Now include it in median_text
+median_text <- paste0(
+  "Median survival times (95% CI) & log-rank test:\n",
+  levels(summary_table$sex)[1], ": ", med$median[1], " days (", med$lower[1], "–", med$upper[1], ")\n",
+  levels(summary_table$sex)[2], ": ", med$median[2], " days (", med$lower[2], "–", med$upper[2], ")\n",
+  p_formatted
+)
+
+p <- ggsurvplot(
+  km_fit_comp,
+  data = summary_table,
   
-  pval = TRUE,                         # can we change size of p-value? 
-  pval.coord = c(1800,.91),            # also want to softcode this ... 
+  title    = "Kaplan-Meier Survival Curves by Gender", #make dynamic 
+  subtitle = "Stratified by sex • n = 210", #make dynamic 
   
-  conf.int = TRUE,          
-  conf.int.style = "step",    #see if we can change this 
+  font.title    = c(14, "bold",   "black"),
+  font.subtitle = c(11, "plain",  "grey40"),
+  font.x        = c(11, "plain",  "black"),       
+  font.y        = c(11, "plain",  "black"),       
+  font.tickslab = c(9,  "plain",  "black"),       
   
-  xlab = "Time (days)",    
+  #surv.median.line = "hv", #looks bad on this example data, but add in later 
+  
+  pval = FALSE,
+  conf.int = TRUE,
+  conf.int.style = "step",
+  
+  xlab = "Time (days)",
   ylab = "Survival Probability",
-  break.time.by = 200,      
-  ggtheme = theme_light(),  
+  break.time.by = 200,
   
-  risk.table = "abs_pct",   
-  risk.table.y.text.col = T, 
-  risk.table.y.text = FALSE, 
+  ggtheme = theme_light(),
   
-  ncensor.plot = TRUE,       
-  legend.title = "Gender",              # change legend labels - MAKE DYNAMIC
-  legend.labs = c("Female", "Male"),    # change legend labels - MAKE DYNAMIC 
-  font.legend = 10, 
-  palette = c("#E7B800", "#2E9FDF"))
+  risk.table = "abs_pct",
+  risk.table.y.text.col = TRUE,
+  risk.table.y.text = FALSE,
+  
+  ncensor.plot = TRUE,
+  
+  legend.title = "Gender",
+  legend.labs = gender_levels,   
+  font.legend = 10,
+  palette = c("#E7B800", "#2E9FDF")
+)
+
+# Add median survival annotation 
+p$plot <- p$plot +
+  annotate(
+    geom  = "text",
+    x     = Inf,                # right edge
+    y     = Inf,                # top edge
+    label = median_text,
+    hjust = 1.05,               # slightly inset from right
+    vjust = 1.05,               # slightly inset from top
+    size  = 3.6,                # adjust: 3.4–4.0 depending on your plot size
+    color = "grey20",
+    fontface = "plain",
+    lineheight = 1.2
+  )
+
+print(p)
 
 # Return the original data unchanged
 return(data)
@@ -1032,16 +1206,20 @@ return(data)
 # This about whether this could be included: 
 
 # Nice summary for >1 fit variables -- find good case study 
-summary_table %>% 
-  tabyl(sex, age_cat_small, show_na = F) %>% 
+library(janitor)
+stratified_summary <- summary_table %>% 
+  tabyl(sex, show_na = F) %>% 
   adorn_totals(where = "both") %>% 
   adorn_percentages() %>% 
   adorn_pct_formatting() %>% 
   adorn_ns(position = "front")
 
-gender         0-4          5-19           20+          Total
-f 482 (22.4%) 1,184 (54.9%)   490 (22.7%) 2,156 (100.0%)
-m 325 (15.0%)   880 (40.6%)   960 (44.3%) 2,165 (100.0%)
-Total 807 (18.7%) 2,064 (47.8%) 1,450 (33.6%) 4,321 (100.0%)
+# -> Write summary to CSV artefact 
+write.csv(stratified_summary, file = "stratified_summary_statistics.csv", row.names = FALSE)
 
-# This prototype provides a basic MoveApps R function app for survival analysis. It assumes the input is a move2::move2_loc object, which is standard in MoveApps workflows for location data from Movebank.
+
+# Cox Model with staggered entry 
+CREATE A NEW APP FOR THIS 
+treatment <- "sex"
+cox_fit <- coxph(Surv(entry_time_days, exit_time_days, mortality_event) ~ treatment, data = summary_table)
+summary(cox_fit)
