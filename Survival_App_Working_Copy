@@ -1076,7 +1076,7 @@ p_surv_plot   <- p_surv$plot
 p_cuminc_plot <- p_cuminc$plot
 library(patchwork) 
 
-(p_surv_plot + p_cuminc_plot) +
+combined <- p_surv_plot + p_cuminc_plot +
   plot_layout(ncol = 1) +
   plot_annotation(title = "Overall Survival and Cumulative Mortality",
                   theme = theme(plot.title = element_text(hjust = 0.5, 
@@ -1087,7 +1087,11 @@ library(patchwork)
         legend.text = element_text(size = 11))
 
 # -> save plot attribute 
-DO THIS; need to debug issues with patchwork 
+ggsave(filename = "survival_hazard_combined.png", 
+       plot = combined,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
 
   
 ## Comparison -----------------------------------------------------------------
@@ -1151,7 +1155,7 @@ median_text <- paste0(
 )
 
 # Plot 
-p <- ggsurvplot(
+km_curve_stratified <- ggsurvplot(
   km_fit_comp,
   data = summary_table,
   
@@ -1203,8 +1207,12 @@ p$plot <- p$plot +
     lineheight = 1.2
   )
 
-# -> save plot as artifact 
-DO THIS 
+# -> save plot attribute 
+ggsave(filename = "km_curve_stratified.png", 
+       plot = km_curve_stratified,           
+       width = 10, height = 6, units = "in",
+       dpi = 300, 
+       bg = "white")
 
 
 # Return the original data unchanged
