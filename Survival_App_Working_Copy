@@ -1093,26 +1093,37 @@ DO THIS; need to debug issues with patchwork
 ## Comparison -----------------------------------------------------------------
 
 if group_comparsion_individual (== TRUE), 
-SOFT CODE IN VARIABLE 
+SOFT CODE IN VARIABLE; testing below with sex (m/f)
 
-# Fit survival object 
+## Fit survival object with stratification
 summary_table$time_at_risk <- summary_table$exit_time_days - summary_table$entry_time_days
 km_fit_comp <- survfit(Surv(time_at_risk, mortality_event) ~ sex, data = summary_table)
 p_value <- surv_pvalue(km_fit_comp)$pval
 
 
+## Nice summary for >1 fit variables  
+library(janitor)
+stratified_summary <- summary_table %>% 
+  tabyl(sex, show_na = F) %>% 
+  adorn_totals(where = "both") %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns(position = "front")
+
+# -> Write summary to CSV artefact 
+write.csv(stratified_summary, file = "stratified_summary_statistics.csv", row.names = FALSE)
+
+
 ## Log-Rank test 
-test <- survdiff(Surv(time_at_risk, mortality_event) ~ sex, data=summary_table)
+test <- survdiff(Surv(time_at_risk, mortality_event) ~ sex, data=summary_table)    
 
-library(knitr)     # for nice printing
-
-# Extract key pieces
+# Extract key information 
 chisq_stat   <- test$chisq
 df           <- length(test$n) - 1
 p_value      <- 1 - pchisq(chisq_stat, df)
 p_formatted  <- ifelse(p_value < 0.001, "< 0.001", sprintf("%.3f", p_value))
 
-# Create a simple table
+# Create table
 logrank_table <- tibble(
   Comparison          = paste(deparse(test$call$formula[[3]]), collapse = " "),
   "N (events)"        = paste(test$n, " (", test$obs, " events)", sep = ""),
@@ -1125,16 +1136,13 @@ logrank_table <- tibble(
 write.csv(logrank_table, file = "logrank_table_statistics.csv", row.names = FALSE)
 
 
-# -> generate a nice table that flags significance 
-
-
-# Comparison survival plot curve 
+## Comparison survival plot curve 
 gender_levels <- unique(summary_table$sex)  # CHANGE sex to stratifying variable
 med <- surv_median(km_fit_comp)
-# Format nicely (e.g. p = 0.057 or p < 0.001)
+p_value <- 
 p_formatted <- ifelse(p_value < 0.001, "p < 0.001", sprintf("p = %.3f", p_value))
 
-# Now include it in median_text
+# Generate statistics for plot 
 median_text <- paste0(
   "Median survival times (95% CI) & log-rank test:\n",
   levels(summary_table$sex)[1], ": ", med$median[1], " days (", med$lower[1], "–", med$upper[1], ")\n",
@@ -1142,6 +1150,7 @@ median_text <- paste0(
   p_formatted
 )
 
+# Plot 
 p <- ggsurvplot(
   km_fit_comp,
   data = summary_table,
@@ -1179,41 +1188,28 @@ p <- ggsurvplot(
   palette = c("#E7B800", "#2E9FDF")
 )
 
-# Add median survival annotation 
+# Add statistics annotation 
 p$plot <- p$plot +
   annotate(
     geom  = "text",
-    x     = Inf,                # right edge
-    y     = Inf,                # top edge
+    x     = Inf,                 
+    y     = Inf,                 
     label = median_text,
-    hjust = 1.05,               # slightly inset from right
-    vjust = 1.05,               # slightly inset from top
-    size  = 3.6,                # adjust: 3.4–4.0 depending on your plot size
+    hjust = 1.05,               
+    vjust = 1.05,                
+    size  = 3.6,                 
     color = "grey20",
     fontface = "plain",
     lineheight = 1.2
   )
 
-print(p)
+# -> save plot as artifact 
+DO THIS 
+
 
 # Return the original data unchanged
 return(data)
 }
-
-
-# This about whether this could be included: 
-
-# Nice summary for >1 fit variables -- find good case study 
-library(janitor)
-stratified_summary <- summary_table %>% 
-  tabyl(sex, show_na = F) %>% 
-  adorn_totals(where = "both") %>% 
-  adorn_percentages() %>% 
-  adorn_pct_formatting() %>% 
-  adorn_ns(position = "front")
-
-# -> Write summary to CSV artefact 
-write.csv(stratified_summary, file = "stratified_summary_statistics.csv", row.names = FALSE)
 
 
 # Cox Model with staggered entry 
