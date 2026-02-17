@@ -27,41 +27,34 @@ time_period_start    <- as.POSIXct("2001-01-01", tz= "UTC")
 time_period_end      <- NA
 
 ## Fix NA times (3 options): 
-# 1a) Replace NA deploy_off_timestamp with time_period_end
-reset_na_end <- "YES"
-
-# 1b) Replace NA deploy_off_timestamp with current date 
-reset_systime_end <- "NO"
-
-# 1c) Remove tracks with no deploy_on_timestamp and/or deploy_off_timestamp 
-NEED TO CODE THIS 
-
+# timestamp: Replace NA deploy_off_timestamp with time_period_end
+# systime:   Replace NA deploy_off_timestamp with current date 
+# remove:    Remove tracks with no deploy_on_timestamp and/or deploy_off_timestamp 
+fix_na_times        <- c("timestamp", "systime", "remove") 
 
 # Survival year 
 # Input: Month of year as %M (e.g, "06" for June, "11" for November)
 # Default: Leave blank (NA), survival year assumed to start in January  
-survival_year_start  <- "06"
+# survival_year_start  <- "06"
 
 # Censor capture-related mortality
 # Input: Number of days (integer) to exclude from analysis post-capture 
-QUESTION: do we want to 1) exclude records where individuals die in this period OR 2) do 1 and start all capture histories this no. days post-capture? Assuming 2, but check 
 # Inclusive of capture date 
 # Default: 0 
 censor_capture_mortality <- 2 
 
-# Group comparisons
+QUESTION: do we want to 1) exclude records where individuals die in this period OR 2) do 1 and start all capture histories this no. days post-capture? Assuming 2, but check 
+
+# Group comparisons (4 options):
 # Input: Variable to compare across
-# Options: sex, lifestage, reproCond_pregnant, reproCond_offspring
-group_comparsion_individual <- "sex"          
+# Options: sex, lifestage, reproCond, attachment 
+group_comparsion_individual <- c("sex", "lifestage", "reproCond", "attachment")       
 
-# Additional plots & diagnostics 
-# Input: Yes/No 
-
-# Combined plots as well as individual plots 
-combined_survival_hazard_plot <- "YES"        
+QUESTION: additional conditions to add: with_offspring, body_condition, animal_age,
+animal_life_stage_exact, animal_status? 
 
 
-# Load data -------------------------------------------------------------------
+# Load test data --------------------------------------------------------------
 
 movebank_store_credentials("username", "password", force = T)
 
@@ -87,6 +80,8 @@ albertaBC_moose <- movebank_download_study(study_id = 178994931)
 
 
 ## Review ---------------------------------------------------------------------
+
+data <- mountain_caribou
 
 ## Not to be included in final app; for debugging purposes
 
@@ -129,8 +124,6 @@ cat("All unique individual ids?", n_distinct_individ == n_total, "\n")
 
 
 ## Clean data -----------------------------------------------------------------
-
-data <- mountain_caribou
 
 ## Basic cleaning --- 
 
